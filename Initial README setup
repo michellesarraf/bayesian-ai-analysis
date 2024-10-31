@@ -1,0 +1,24 @@
+# Bayesian Analysis of AI Predictions in Social Science
+
+## Project Description
+This repository contains materials for a research project examining how base rates affect the predictive validity of large language models (LLMs) in social science research using Bayesian analysis. The project specifically investigates whether AI predictions of experimental outcomes may have lower practical utility when the base rate of true effects is low.
+
+## Project Components
+- `prospectus.pdf`: Research proposal and analysis plan
+- `analysis/`: Folder for R scripts (to be added)
+- `data/`: Folder for datasets (to be added after receiving from study authors)
+
+## Research Question
+Evaluating how the base rate of significant effects influences the practical value of AI predictions in experimental research, using Bayesian statistical approaches to calculate posterior probabilities of true effects.
+
+## Timeline
+- Fall 2024: Initial analysis and methodology development
+- More detailed timeline to be added
+
+## Author
+Michelle Sarraf
+PhD Student, Social Psychology
+University of Southern California
+
+## Note
+Data files and analysis scripts will be added as the project progresses. This repository will be updated regularly throughout the course of the project.
