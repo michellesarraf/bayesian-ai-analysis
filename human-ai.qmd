@@ -1,6 +1,6 @@
 ---
 title: "Human_AI"
-format: html
+format: gfm
 ---
 
 
@@ -213,35 +213,3 @@ interact_plot(model_synergy,
              plot.points = TRUE)
 ```
 
-```{r conditional-effects}
-#| fig-cap: "Conditional Effects from the Hierarchical Model"
-
-# Plot conditional effects
-conditional_effects <- conditional_effects(model_synergy)
-plot(conditional_effects)
-```
-
-## Key Findings
-
-Based on our analysis, we found:
-
-1. **Synergy Prevalence**: 
-   - About {round(nrow(synergy_cases) / nrow(df) * 100, 1)}% of cases showed human-AI synergy
-   - Mean advantage when present: {round(mean(synergy_cases$hai_advantage), 2)}
-
-2. **Key Factors**:
-   - AI Explanations showed {prob_positive$Prob_Positive[1] > 0.5 ? "positive" : "limited"} impact
-   - User expertise demonstrated {prob_positive$Prob_Positive[2] > 0.5 ? "significant" : "minimal"} effect
-   - AI confidence levels had {prob_positive$Prob_Positive[3] > 0.5 ? "notable" : "minimal"} influence
-
-3. **Interaction Effects**:
-   - [Add interpretation of interaction effects]
-   - [Add implications for system design]
-
-## Discussion
-
-[Add discussion of findings and implications]
-
-## References
-
-[Add your references]
