@@ -1,0 +1,247 @@
+---
+title: "Human_AI"
+format: html
+---
+
+
+## Introduction
+
+This analysis examines the conditions under which human-AI collaboration (HAI) outperforms AI alone in decision tasks. We investigate various factors including AI explanations, user expertise, and AI confidence levels.
+
+```{r setup}
+#| message: false
+#| warning: false
+
+# Load required libraries
+library(tidyverse)
+library(brms)
+library(tidybayes)
+library(knitr)
+library(ggplot2)
+library(corrplot)
+library(effectsize)
+library(interactions)
+
+# Set seed for reproducibility
+set.seed(42)
+```
+
+## Data Preparation
+
+```{r load-data}
+# Load and prepare data
+df <- read_csv("Data_Extraction (1).csv") %>%
+  # Filter for decision tasks
+  filter(Task_Type == "Decide") %>%
+  # Calculate performance metrics
+  mutate(
+    # Calculate HAI advantage over AI
+    hai_advantage = Avg_Perf_HumanAI_Adj - Avg_Perf_AI_Adj,
+    # Binary indicator for cases where HAI beats AI
+    hai_beats_ai = hai_advantage > 0,
+    # Convert relevant columns to logical
+    AI_Expl_Incl = if_else(AI_Expl_Incl == "Yes", TRUE, FALSE),
+    AI_Conf_Incl = if_else(AI_Conf_Incl == "Yes", TRUE, FALSE),
+    Participant_Expert = if_else(Participant_Expert == "Yes", TRUE, FALSE)
+  )
+
+# Create dataset of synergy cases
+synergy_cases <- df %>%
+  filter(hai_beats_ai)
+```
+
+## Overview of Synergy Cases
+
+```{r summarize-synergy}
+# Basic Summary Statistics
+synergy_summary <- data.frame(
+  Metric = c("Total Decision Tasks", 
+             "Cases with HAI > AI",
+             "Proportion with Synergy",
+             "Mean HAI Advantage (when present)",
+             "SD of HAI Advantage (when present)"),
+  Value = c(nrow(df),
+            nrow(synergy_cases),
+            round(nrow(synergy_cases) / nrow(df), 3),
+            round(mean(synergy_cases$hai_advantage), 3),
+            round(sd(synergy_cases$hai_advantage), 3))
+)
+
+kable(synergy_summary, caption = "Overview of Synergy Cases")
+```
+
+## Factor Analysis
+
+```{r analyze-factors}
+# Enhanced Factor Analysis with Effect Sizes
+factor_comparison <- df %>%
+  group_by(hai_beats_ai) %>%
+  summarise(
+    n_cases = n(),
+    pct_with_explanations = mean(AI_Expl_Incl) * 100,
+    pct_with_confidence = mean(AI_Conf_Incl) * 100,
+    pct_expert_users = mean(Participant_Expert) * 100,
+    mean_ai_accuracy = mean(Avg_Perf_AI_Adj),
+    sd_ai_accuracy = sd(Avg_Perf_AI_Adj),
+    .groups = 'drop'
+  )
+
+# Calculate effect sizes
+effect_sizes <- data.frame(
+  Factor = c("AI Explanations", "AI Confidence", "Expert Users", "AI Accuracy"),
+  Cohens_d = c(
+    cohens_d(as.numeric(AI_Expl_Incl) ~ hai_beats_ai, data = df)$Cohens_d,
+    cohens_d(as.numeric(AI_Conf_Incl) ~ hai_beats_ai, data = df)$Cohens_d,
+    cohens_d(as.numeric(Participant_Expert) ~ hai_beats_ai, data = df)$Cohens_d,
+    cohens_d(Avg_Perf_AI_Adj ~ hai_beats_ai, data = df)$Cohens_d
+  )
+)
+
+# Print tables
+kable(factor_comparison, 
+      caption = "Comparison of Factors Between Synergy and Non-Synergy Cases",
+      digits = 2)
+
+kable(effect_sizes,
+      caption = "Effect Sizes for Key Factors",
+      digits = 3)
+```
+
+## Correlation Analysis
+
+```{r correlation}
+#| fig-cap: "Correlation Matrix of Key Factors"
+
+# Create correlation matrix
+cor_matrix <- df %>%
+  select(hai_advantage, AI_Expl_Incl, AI_Conf_Incl, 
+         Participant_Expert, Avg_Perf_AI_Adj) %>%
+  cor()
+
+# Plot correlation matrix
+corrplot(cor_matrix, 
+         method = "color",
+         type = "upper",
+         addCoef.col = "black",
+         tl.col = "black",
+         tl.srt = 45,
+         diag = FALSE)
+```
+
+## Hierarchical Bayesian Analysis
+
+```{r model-synergy}
+#| cache: true
+
+# Fit hierarchical Bayesian model
+model_synergy <- brm(
+  hai_advantage ~ AI_Expl_Incl * Participant_Expert +
+                  AI_Conf_Incl * Avg_Perf_AI_Adj +
+                  (1|Paper_ID),
+  data = df,
+  family = gaussian(),
+  prior = c(
+    prior(normal(0, 0.5), class = "Intercept"),
+    prior(normal(0, 0.5), class = "b"),
+    prior(exponential(1), class = "sd")
+  ),
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  cores = 4,
+  seed = 42
+)
+
+# Model Summary
+summary(model_synergy)
+```
+
+## Posterior Probability Analysis
+
+```{r posterior-prob}
+# Extract posterior probabilities
+draws <- as_draws_df(model_synergy)
+prob_positive <- data.frame(
+  Factor = c("AI Explanations", 
+             "Expert Users", 
+             "AI Confidence", 
+             "AI Performance",
+             "AI Explanations:Expert Users",
+             "AI Confidence:AI Performance"),
+  Prob_Positive = c(
+    mean(draws$b_AI_Expl_InclTRUE > 0),
+    mean(draws$b_Participant_ExpertTRUE > 0),
+    mean(draws$b_AI_Conf_InclTRUE > 0),
+    mean(draws$b_Avg_Perf_AI_Adj > 0),
+    mean(draws$`b_AI_Expl_InclTRUE:Participant_ExpertTRUE` > 0),
+    mean(draws$`b_AI_Conf_InclTRUE:Avg_Perf_AI_Adj` > 0)
+  )
+)
+
+kable(prob_positive, 
+      caption = "Probability of Positive Effect on HAI Advantage",
+      digits = 3)
+```
+
+## Visualization of Effects
+
+```{r visualize-effects}
+#| fig-cap: "HAI Advantage vs AI Performance by User Expertise and AI Explanations"
+
+# Main effects plot
+ggplot(df, aes(x = Avg_Perf_AI_Adj, y = hai_advantage, color = AI_Expl_Incl)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~Participant_Expert) +
+  theme_minimal() +
+  labs(
+    title = "HAI Advantage vs AI Performance",
+    subtitle = "Faceted by User Expertise, Colored by AI Explanations",
+    x = "AI Performance",
+    y = "HAI Advantage over AI",
+    color = "AI Explanations\nIncluded"
+  )
+```
+
+```{r interaction-plot}
+#| fig-cap: "Interaction Effects Between AI Explanations and User Expertise"
+
+# Interaction plot
+interact_plot(model_synergy, 
+             pred = AI_Expl_Incl, 
+             modx = Participant_Expert,
+             plot.points = TRUE)
+```
+
+```{r conditional-effects}
+#| fig-cap: "Conditional Effects from the Hierarchical Model"
+
+# Plot conditional effects
+conditional_effects <- conditional_effects(model_synergy)
+plot(conditional_effects)
+```
+
+## Key Findings
+
+Based on our analysis, we found:
+
+1. **Synergy Prevalence**: 
+   - About {round(nrow(synergy_cases) / nrow(df) * 100, 1)}% of cases showed human-AI synergy
+   - Mean advantage when present: {round(mean(synergy_cases$hai_advantage), 2)}
+
+2. **Key Factors**:
+   - AI Explanations showed {prob_positive$Prob_Positive[1] > 0.5 ? "positive" : "limited"} impact
+   - User expertise demonstrated {prob_positive$Prob_Positive[2] > 0.5 ? "significant" : "minimal"} effect
+   - AI confidence levels had {prob_positive$Prob_Positive[3] > 0.5 ? "notable" : "minimal"} influence
+
+3. **Interaction Effects**:
+   - [Add interpretation of interaction effects]
+   - [Add implications for system design]
+
+## Discussion
+
+[Add discussion of findings and implications]
+
+## References
+
+[Add your references]
